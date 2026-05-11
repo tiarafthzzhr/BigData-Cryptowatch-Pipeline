@@ -1,6 +1,0 @@
-kafka-python-ng
-feedparser
-hdfs
-flask
-pyspark
-requests
