@@ -95,6 +95,7 @@ Berikut adalah daftar revisi yang dilakukan berdasarkan arahan dosen setelah pre
 **File:** `dashboard/frontend_source/src/components/KMeansChart.tsx` *(NEW)*, `App.tsx`, `utils/types.ts`, `utils/api.ts`
 
 Sebelumnya, hasil analisis K-Means hanya tersimpan di file JSON dan tidak divisualisasikan di Dashboard. Sekarang, telah ditambahkan komponen React baru (`KMeansChart.tsx`) yang menampilkan 3 cluster koin (High Value, Mid Value, Low Value) beserta rata-rata harga dan jumlah data point yang dianalisis.
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/7dbce08c-4452-40db-b609-754d9e13a547" />
 
 ### 2. Spark Berjalan Otomatis (Continuous/Real-time)
 **File:** `spark/analysis.py`
@@ -109,11 +110,13 @@ Sebelumnya, mekanisme flush mengosongkan file `live_rss.json` sehingga Dashboard
 - Menggabungkan data lama + data baru
 - Melakukan deduplikasi berdasarkan URL artikel
 - Menyimpan maksimal **20 artikel terbaru** agar Dashboard tidak pernah kosong
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/7d0e6c1d-ba0e-49b9-b475-9f730c272ff7" />
 
 ### 4. Spark Menyimpan Hasil ke HDFS
 **File:** `spark/analysis.py`
 
 Sebelumnya, folder `/data/crypto/hasil/` di HDFS belum dibuat secara otomatis sehingga penyimpanan gagal. Sekarang, script Spark otomatis membuat folder tersebut (`hdfs dfs -mkdir -p`) sebelum menyimpan file `spark_results.json` ke HDFS di setiap siklus analisis.
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6bcea58d-e9bb-4be1-b1c9-3e9e6f3c4bca" />
 
 ---
 
