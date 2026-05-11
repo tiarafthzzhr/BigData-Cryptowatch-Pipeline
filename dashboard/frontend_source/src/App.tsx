@@ -6,8 +6,9 @@ import VolatilityChart from './components/VolatilityChart';
 import NewsVolumeChart from './components/NewsVolumeChart';
 import LatestNews from './components/LatestNews';
 import PipelineStatus from './components/PipelineStatus';
+import KMeansChart from './components/KMeansChart';
 import { fetchAllData } from './utils/api';
-import { CryptoPrice, HourlyPrice, HourlyVolatility, NewsVolume, NewsItem, PipelineStep } from './utils/types';
+import { CryptoPrice, HourlyPrice, HourlyVolatility, NewsVolume, NewsItem, PipelineStep, KMeansCluster } from './utils/types';
 
 const REFRESH_INTERVAL = 60000;
 
@@ -18,6 +19,7 @@ function App() {
   const [newsVolume, setNewsVolume] = useState<NewsVolume[]>([]);
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [pipeline, setPipeline] = useState<PipelineStep[]>([]);
+  const [clusters, setClusters] = useState<KMeansCluster[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -32,6 +34,7 @@ function App() {
       setNewsVolume(data.newsVolume);
       setNewsItems(data.newsItems);
       setPipeline(data.pipeline);
+      setClusters(data.clusters);
       setLastRefresh(new Date());
     } catch (e) {
       console.error(e);
@@ -80,14 +83,19 @@ function App() {
           <VolatilityChart data={volatility} loading={loading} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <NewsVolumeChart data={newsVolume} loading={loading} />
           <LatestNews items={newsItems} loading={loading} />
         </div>
 
+        {/* K-Means Clustering (Bonus MLlib) */}
+        <div className="grid grid-cols-1 gap-6">
+          <KMeansChart data={clusters} loading={loading} />
+        </div>
+
         <footer className="mt-10 pb-6 text-center">
           <p className="text-xs text-slate-600">
-            Crypto Big Data Dashboard &mdash; Data sourced from CoinGecko API & RSS Feeds
+            Crypto Big Data Dashboard &mdash; Data sourced from CoinGecko API &amp; RSS Feeds
           </p>
         </footer>
       </div>

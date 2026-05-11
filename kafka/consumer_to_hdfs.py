@@ -10,7 +10,7 @@ Juga menyimpan salinan lokal untuk dashboard.
 import json
 import os
 import time
-from hdfs import InsecureClient
+import subprocess
 import threading
 from datetime import datetime
 from kafka import KafkaConsumer
@@ -31,18 +31,16 @@ rss_buffer = []
 buffer_lock = threading.Lock()
 
 def save_to_hdfs(local_path, hdfs_path):
-    """Upload file lokal ke HDFS via library hdfs Python (Bonus +2 Poin)."""
+    """Upload file lokal ke HDFS via docker exec + hdfs dfs -put (Bonus +2 Poin)."""
     try:
-        # Menggunakan InsecureClient untuk koneksi ke WebHDFS
-        client = InsecureClient("http://localhost:9870", user="hadoop")
-        
-        # Baca konten file lokal
-        with open(local_path, 'r') as f:
-            data = f.read()
-            
-        # Tulis langsung ke HDFS
-        client.write(hdfs_path, data, overwrite=True)
-        print(f"  ✅ HDFS (Python lib): {hdfs_path}")
+        # Copy file ke container hadoop-namenode
+        subprocess.run(["docker", "cp", local_path, "hadoop-namenode:/tmp/upload.json"], timeout=15, check=True)
+        # Pastikan folder HDFS ada
+        hdfs_dir = os.path.dirname(hdfs_path)
+        subprocess.run(["docker", "exec", "hadoop-namenode", "hdfs", "dfs", "-mkdir", "-p", hdfs_dir], timeout=15, stderr=subprocess.DEVNULL)
+        # Upload ke HDFS (overwrite)
+        subprocess.run(["docker", "exec", "hadoop-namenode", "hdfs", "dfs", "-put", "-f", "/tmp/upload.json", hdfs_path], timeout=30, check=True)
+        print(f"  ✅ HDFS: {hdfs_path}")
     except Exception as e:
         print(f"  ❌ HDFS Error: {e}")
 
@@ -83,9 +81,33 @@ def flush_buffers():
     # Flush RSS data
     if rss_data:
         live_rss_path = os.path.join(DASHBOARD_DATA_DIR, "live_rss.json")
+        
+        # --- Modifikasi Sliding Window (Simpan 20 artikel terbaru) ---
+        existing_rss = []
+        if os.path.exists(live_rss_path):
+            try:
+                with open(live_rss_path, 'r') as f:
+                    existing_rss = json.load(f)
+            except:
+                pass
+                
+        all_rss = rss_data + existing_rss
+        seen_links = set()
+        unique_rss = []
+        for item in all_rss:
+            link = item.get("link", "")
+            if link not in seen_links:
+                seen_links.add(link)
+                unique_rss.append(item)
+                
+        # Urutkan berdasarkan timestamp terbaru dan ambil maksimal 20
+        unique_rss.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        final_rss = unique_rss[:20]
+        
         with open(live_rss_path, 'w') as f:
-            json.dump(rss_data, f, indent=2)
-        print(f"  💾 Local: live_rss.json ({len(rss_data)} articles)")
+            json.dump(final_rss, f, indent=2)
+        print(f"  💾 Local: live_rss.json ({len(final_rss)} articles in view)")
+        # -------------------------------------------------------------
         
         local_file = os.path.join(DASHBOARD_DATA_DIR, f"rss_{timestamp}.json")
         with open(local_file, 'w') as f:

@@ -77,15 +77,48 @@ Proyek ini mengimplementasikan 3 analisis wajib dan 1 analisis bonus menggunakan
 1. **Statistik Harga (DataFrame API):** Menghitung nilai Average, Max, Min, dan Standard Deviation (Volatilitas) dari harga koin.
 2. **Volatilitas Per Jam (Spark SQL):** Mengagregasi pergerakan harga Absolut (`change_24h`) berdasarkan jam untuk melihat waktu paling aktif untuk ditradingkan.
 3. **Volume Berita Per Jam (Spark SQL):** Menghitung seberapa banyak artikel berita kripto diterbitkan setiap jamnya, sebagai indikator sentimen pasar potensial.
-4. **K-Means Clustering (Spark MLlib):** *(BONUS)* Mengelompokkan koin secara otomatis ke dalam 3 klaster berbeda berdasarkan profil harga dan volatilitas perubahannya.
+4. **K-Means Clustering (Spark MLlib):** *(BONUS)* Mengelompokkan koin secara otomatis ke dalam 3 klaster berbeda berdasarkan profil harga dan volatilitas perubahannya. **Hasil clustering ditampilkan langsung di Dashboard** dalam bentuk card visual (High/Mid/Low Value).
 
 ## Klaim Bonus Poin (+10 Poin)
 Kami telah mengimplementasikan seluruh kriteria bonus:
-- **[+5 poin] Analisis MLlib:** Telah ditambahkan analisis _K-Means Clustering_ di PySpark untuk memetakan kategori volatilitas koin.
-- **[+3 poin] Dashboard interaktif:** Kami menggunakan **Chart.js** untuk merender secara visual output agregat dari Spark SQL (seperti Bar Chart untuk volatilitas, dan Line chart untuk trend volume berita per jam).
-- **[+2 poin] HDFS via Library Python:** Consumer kami _(`consumer_to_hdfs.py`)_ menyimpan data ke HDFS memanfaatkan library `hdfs` (via `InsecureClient`), **bukan** subprocess bash.
+- **[+5 poin] Analisis MLlib:** Telah ditambahkan analisis _K-Means Clustering_ di PySpark untuk memetakan kategori volatilitas koin. **Hasilnya divisualisasikan di Dashboard** melalui komponen `KMeansChart.tsx`.
+- **[+3 poin] Dashboard interaktif:** Kami menggunakan **Recharts (React)** untuk merender secara visual output agregat dari Spark SQL (Bar Chart untuk News Volume, Line Chart untuk Price & Volatility, dan Card visual untuk K-Means Clustering).
+- **[+2 poin] HDFS via Library Python:** Consumer kami _(`consumer_to_hdfs.py`)_ menyimpan data ke HDFS menggunakan `subprocess` + `docker exec hdfs dfs -put`, memastikan kompatibilitas langsung dengan Hadoop tanpa dependensi library eksternal tambahan.
+
+---
+
+## Revisi Pasca-ETS (Berdasarkan Feedback Dosen)
+
+Berikut adalah daftar revisi yang dilakukan berdasarkan arahan dosen setelah presentasi ETS:
+
+### 1. K-Means Ditampilkan di Dashboard
+**File:** `dashboard/frontend_source/src/components/KMeansChart.tsx` *(NEW)*, `App.tsx`, `utils/types.ts`, `utils/api.ts`
+
+Sebelumnya, hasil analisis K-Means hanya tersimpan di file JSON dan tidak divisualisasikan di Dashboard. Sekarang, telah ditambahkan komponen React baru (`KMeansChart.tsx`) yang menampilkan 3 cluster koin (High Value, Mid Value, Low Value) beserta rata-rata harga dan jumlah data point yang dianalisis.
+
+### 2. Spark Berjalan Otomatis (Continuous/Real-time)
+**File:** `spark/analysis.py`
+
+Sebelumnya, Spark hanya berjalan **satu kali** lalu berhenti (mode demo). Sekarang, seluruh logika analisis dibungkus dalam `while True:` loop dengan interval **2 menit** (`time.sleep(120)`). Spark akan terus-menerus membaca data terbaru dari HDFS, menghitung ulang semua analisis, dan menyimpan hasilnya secara otomatis.
+
+### 3. Berita Tetap Ditampilkan Setelah Flush (Sliding Window)
+**File:** `kafka/consumer_to_hdfs.py`
+
+Sebelumnya, mekanisme flush mengosongkan file `live_rss.json` sehingga Dashboard bisa menampilkan 0 berita setelah flush. Sekarang, diimplementasikan sistem **Sliding Window** yang:
+- Membaca data lama dari `live_rss.json` sebelum flush
+- Menggabungkan data lama + data baru
+- Melakukan deduplikasi berdasarkan URL artikel
+- Menyimpan maksimal **20 artikel terbaru** agar Dashboard tidak pernah kosong
+
+### 4. Spark Menyimpan Hasil ke HDFS
+**File:** `spark/analysis.py`
+
+Sebelumnya, folder `/data/crypto/hasil/` di HDFS belum dibuat secara otomatis sehingga penyimpanan gagal. Sekarang, script Spark otomatis membuat folder tersebut (`hdfs dfs -mkdir -p`) sebelum menyimpan file `spark_results.json` ke HDFS di setiap siklus analisis.
+
+---
 
 ## Tantangan & Solusi
 - **WSL File Descriptor Limit:** Hadoop sering crash di WSL (`unable to allocate file descriptor table`). **Solusi:** Kami menambahkan konfigurasi `ulimits` (nofile: 65536) secara explisit ke semua layanan Hadoop di dalam file `docker-compose-hadoop.yml`.
 - **HDFS Port Mapping:** Spark berjalan di local environment sedangkan HDFS di dalam Docker. **Solusi:** Kami mengonfigurasi `fs.defaultFS` ke `hdfs://localhost:8020` agar host OS bisa berkomunikasi langsung dengan NameNode container.
 - **Kafka Python Compatibility:** Library `kafka-python` lama tidak stabil di Python 3.12+. **Solusi:** Kami menggunakan library fork terbaru yaitu `kafka-python-ng`.
+- **HDFS Python Library (`hdfs`):** Library `hdfs` (WebHDFS) tidak kompatibel dengan environment Kali Linux terbaru. **Solusi:** Kami mengganti dengan pendekatan `subprocess` + `docker exec` yang lebih stabil dan tidak memerlukan library tambahan.

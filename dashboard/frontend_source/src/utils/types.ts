@@ -39,3 +39,9 @@ export interface PipelineStep {
   status: 'active' | 'error';
   description: string;
 }
+
+export interface KMeansCluster {
+  prediction: number;
+  jumlah_titik: number;
+  avg_price: number;
+}

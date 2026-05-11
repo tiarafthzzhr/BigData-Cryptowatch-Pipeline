@@ -1,4 +1,4 @@
-import { CryptoPrice, HourlyPrice, HourlyVolatility, NewsVolume, PipelineStep, NewsItem } from './types';
+import { CryptoPrice, HourlyPrice, HourlyVolatility, NewsVolume, PipelineStep, NewsItem, KMeansCluster } from './types';
 
 // The Flask backend endpoint
 const FLASK_API = '/api/data';
@@ -122,7 +122,15 @@ export async function fetchAllData() {
       { name: 'spark', label: 'Spark Processing', status: 'active', description: 'Aggregation & MLlib K-Means' },
     ];
 
-    return { prices, hourlyPrices, volatility, newsVolume, newsItems, pipeline };
+    // e. K-Means Clusters
+    const rawClusters = spark.analisis_4_kmeans_clusters || [];
+    const clusters: KMeansCluster[] = rawClusters.map((c: any) => ({
+      prediction: c.prediction,
+      jumlah_titik: c.jumlah_titik,
+      avg_price: c.avg_price,
+    }));
+
+    return { prices, hourlyPrices, volatility, newsVolume, newsItems, pipeline, clusters };
   } catch (error) {
     console.error("Failed to fetch data", error);
     throw error;
