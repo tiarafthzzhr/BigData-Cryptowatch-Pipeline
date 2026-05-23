@@ -50,6 +50,7 @@ builder = (
             "org.apache.spark.sql.delta.catalog.DeltaCatalog")
     .config("spark.driver.memory", "2g")
     .config("spark.ui.enabled", "false")
+    .config("spark.hadoop.dfs.client.use.datanode.hostname", "true")
 )
 
 spark = configure_spark_with_delta_pip(

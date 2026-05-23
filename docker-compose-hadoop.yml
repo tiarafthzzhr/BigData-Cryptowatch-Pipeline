@@ -32,6 +32,7 @@ services:
         condition: service_started
     ports:
       - "9864:9864"
+      - "9866:9866"
     env_file:
       - ./hadoop.env
     command: ["hdfs", "datanode"]
