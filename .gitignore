@@ -1,4 +1,6 @@
 venv/
+lakehouse/lakehouse_venv/
+lakehouse/lakehouse_data/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/

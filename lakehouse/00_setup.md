@@ -102,23 +102,37 @@ $env:PYTHONUTF8       = "1"
 $env:PYTHONIOENCODING = "utf-8"
 ```
 
-Jalankan secara berurutan:
+Jalankan secara berurutan dari folder `lakehouse/`:
 ```powershell
-# 1. Bronze — ingest JSON ke Delta Lake
+# 1. Bronze — ingest JSON dari HDFS ke Delta Lake
 .\lakehouse_venv\Scripts\python.exe 01_bronze.py
 
-# 2. Silver — cleaning + Time Travel demo
+# 2. Silver — cleaning + Time Travel + Schema Evolution
 .\lakehouse_venv\Scripts\python.exe 02_silver.py
 
-# 3. Gold — agregasi + enhanced analysis
+# 3. Gold — agregasi + enhanced analysis (4 tabel)
 .\lakehouse_venv\Scripts\python.exe 03_gold.py
+
+# 4. Export Gold → JSON untuk Flask dashboard (Bonus +5)
+.\lakehouse_venv\Scripts\python.exe 04_export_gold.py
 ```
+
+Lalu jalankan Flask dashboard dari folder root proyek:
+```powershell
+cd ..
+python dashboard/app.py
+```
+
+Buka browser:
+- Dashboard: `http://localhost:5000`
+- Gold Delta API: `http://localhost:5000/api/gold`
 
 **Linux/Mac:**
 ```bash
 lakehouse_venv/bin/python 01_bronze.py
 lakehouse_venv/bin/python 02_silver.py
 lakehouse_venv/bin/python 03_gold.py
+lakehouse_venv/bin/python 04_export_gold.py
 ```
 
 ---
@@ -147,5 +161,7 @@ Setelah ketiga script selesai, Delta tables tersimpan di:
 | `JAVA_HOME not set` | Java belum diinstall/env belum di-set | Set `$env:JAVA_HOME` (lihat langkah 1) |
 | `UnsatisfiedLinkError: NativeIO$Windows` | `hadoop.dll` tidak ditemukan | Pastikan `C:\winutils\bin` ada di PATH |
 | `PATH_NOT_FOUND` dengan `%20` | Spasi di path, winutils belum di PATH | Ikuti langkah 2 + 4 |
-| `NullPointerException` di heartbeat | Versi PySpark/Delta tidak kompatibel | Gunakan PySpark 3.5.3 + delta-spark 3.3.2 |
+| `NullPointerException` di heartbeat | Spark tidak bisa bind ke IP lokal | Tambah `spark.driver.bindAddress=127.0.0.1` di config |
 | `Connection refused: localhost:8020` | HDFS tidak aktif | Normal — script otomatis fallback ke lokal |
+| `Gold data belum tersedia` di `/api/gold` | `04_export_gold.py` belum dijalankan | Jalankan `04_export_gold.py` setelah `03_gold.py` |
+| `SUCCESS: The process with PID ... terminated` | Spark JVM bersih-bersih setelah selesai | Normal, bukan error |

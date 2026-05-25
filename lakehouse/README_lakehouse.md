@@ -20,7 +20,9 @@ Tema: **CryptoWatch** — Pipeline harga kripto real-time (BTC, ETH, BNB)
 4. [Justifikasi Transformasi Silver](#4-justifikasi-transformasi-silver)
 5. [Perbandingan Gold vs ETS Lama](#5-perbandingan-gold-vs-ets-lama)
 6. [Demonstrasi Time Travel](#6-demonstrasi-time-travel)
-7. [Refleksi: Delta Lake vs HDFS JSON](#7-refleksi-delta-lake-vs-hdfs-json)
+7. [Bonus: Schema Evolution & Flask dari Gold](#7-bonus-schema-evolution--flask-dari-gold)
+8. [Refleksi: Delta Lake vs HDFS JSON](#8-refleksi-delta-lake-vs-hdfs-json)
+9. [Screenshots: Output Pipeline](#9-screenshots-output-pipeline)
 
 ---
 
@@ -106,8 +108,10 @@ lakehouse/
 ├── README_lakehouse.md        ← Dokumentasi ini
 ├── 00_setup.md                ← Cara install & menjalankan
 ├── 01_bronze.py               ← Ingest HDFS → Bronze Delta
-├── 02_silver.py               ← Cleaning + Time Travel → Silver Delta
-└── 03_gold.py                 ← Agregasi + Enhanced → Gold Delta
+├── 02_silver.py               ← Cleaning + Time Travel + Schema Evolution → Silver Delta
+├── 03_gold.py                 ← Agregasi + Enhanced → Gold Delta
+├── 04_export_gold.py          ← Export Gold Delta → JSON untuk Flask (Bonus +5)
+└── requirements.txt           ← pyspark==3.5.3, delta-spark==3.3.2
 
 lakehouse_data/                ← Di-generate saat script berjalan
 ├── bronze/
@@ -420,7 +424,85 @@ df_at_time = spark.read.format("delta") \
 
 ---
 
-## 7. Refleksi: Keuntungan Delta Lake vs HDFS JSON
+## 7. Bonus: Schema Evolution & Flask dari Gold
+
+### Bonus +2 — Schema Evolution (`mergeSchema`)
+
+Demonstrasi ada di akhir `02_silver.py`, setelah Time Travel.
+
+Delta Lake secara default **menolak write** jika schema DataFrame berbeda dari schema tabel yang sudah ada (schema enforcement). Untuk menambah kolom baru tanpa error, gunakan opsi `mergeSchema=true`:
+
+```python
+silver_evolved = silver_df.withColumn(
+    "price_tier",
+    when(col("price_usd") > 50000, lit("high"))
+    .when(col("price_usd") > 1000, lit("mid"))
+    .otherwise(lit("low"))
+)
+
+# tanpa mergeSchema → AnalysisException
+# dengan mergeSchema → Delta update skema tabel secara otomatis
+silver_evolved.write \
+    .format("delta") \
+    .option("mergeSchema", "true") \
+    .mode("overwrite") \
+    .save(SILVER_API_PATH)
+```
+
+Setelah ini, Silver API memiliki kolom `price_tier` tambahan. `03_gold.py` tetap berjalan normal karena Gold hanya membaca kolom yang dibutuhkan dan mengabaikan kolom lain.
+
+---
+
+### Bonus +5 — Flask Dashboard Membaca dari Gold Delta
+
+Pipeline lengkap setelah penambahan ini:
+
+```
+01_bronze.py → 02_silver.py → 03_gold.py → 04_export_gold.py → Flask Dashboard
+                                                    ↓
+                              dashboard/data/gold_results.json
+                                                    ↓
+                                      /api/data  (field: gold_results)
+                                      /api/gold  (endpoint khusus Gold)
+```
+
+**Script baru: `04_export_gold.py`**
+
+Membaca semua 4 tabel Gold Delta menggunakan PySpark dan mengekspor ke `dashboard/data/gold_results.json`:
+
+```python
+gold_stats = spark.read.format("delta").load(GOLD_STATS_PATH)
+gold_vol   = spark.read.format("delta").load(GOLD_VOLATILITY_PATH)
+gold_spike = spark.read.format("delta").load(GOLD_SPIKE_PATH)
+gold_news  = spark.read.format("delta").load(GOLD_JOIN_PATH)
+
+# konversi ke JSON dan simpan ke dashboard/data/
+result = { "analisis_1_statistik_harga": [...], "analisis_3_spike_alerts": [...], ... }
+json.dump(result, open("dashboard/data/gold_results.json", "w"))
+```
+
+**Flask `app.py` — endpoint baru:**
+
+```python
+@app.route("/api/gold")
+def api_gold():
+    """Data dari Gold Delta Lake — 4 tabel agregasi."""
+    gold_results = load_json("gold_results.json")
+    return jsonify(gold_results)
+```
+
+`/api/data` juga sekarang menyertakan `gold_results` di responnya, sehingga frontend bisa membaca data dari Gold Delta tanpa perlu mengubah struktur halaman utama.
+
+**Cara menjalankan:**
+```powershell
+python lakehouse/04_export_gold.py   # export Gold → JSON
+python dashboard/app.py              # jalankan Flask
+# cek: http://localhost:5000/api/gold
+```
+
+---
+
+## 8. Refleksi: Keuntungan Delta Lake vs HDFS JSON
 
 ### Masalah HDFS JSON (ETS)
 
@@ -460,3 +542,49 @@ df_at_time = spark.read.format("delta") \
 ---
 
 *Kelompok 7 — Tiara Fatimah A., Zahra Hafidzah, Nafis Faqih Allmuzaky Maolidi, Mohamad Arkan Zahir A.*
+
+---
+
+## 9. Screenshots: Output Pipeline
+
+> Screenshot diambil dari output terminal saat menjalankan keempat script secara berurutan.
+
+---
+
+### Bronze Layer — `01_bronze.py`
+
+**Schema Bronze API + RSS, sample data, ringkasan ingest dari HDFS:**
+
+![Bronze Layer Output](images/bronze.py.png)
+
+---
+
+### Silver Layer — `02_silver.py`
+
+**Laporan cleaning API & RSS (jumlah baris dihapus per transformasi), sample Silver API, Time Travel history & perbandingan versi, Schema Evolution `price_tier`:**
+
+![Silver Cleaning + Time Travel](images/silver.py.png)
+
+**Time Travel — perbandingan data SEKARANG vs VERSI 0, Schema Evolution schema baru:**
+
+![Time Travel Compare + Schema Evolution](images/silver.py2.png)
+
+---
+
+### Gold Layer — `03_gold.py`
+
+**Gold 1 — Statistik Harga Per Simbol, Gold 2 — Volatilitas Per Jam, baseline z-score:**
+
+![Gold Stats + Volatility](images/gold.png)
+
+**Gold 3 — Spike Anomali Z-Score, Gold 4 — Berita vs Spike, ringkasan GOLD LAYER SELESAI:**
+
+![Gold Spike + News Join](images/gold02.png)
+
+---
+
+### Export Gold → Flask — `04_export_gold.py`
+
+**Export 4 tabel Gold Delta ke `dashboard/data/gold_results.json`:**
+
+![Export Gold](images/Export-gold.png)

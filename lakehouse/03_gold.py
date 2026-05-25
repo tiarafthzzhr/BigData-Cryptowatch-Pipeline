@@ -1,16 +1,6 @@
-"""
-03_gold.py — Silver Delta Lake → Gold Delta Lake (Agregasi + Enhanced)
-Tema: CryptoWatch (BTC, ETH, BNB)
-
-4 tabel Gold:
-  [Reproduksi ETS]
-  1. crypto_stats              — avg/min/max/stddev per simbol
-  2. crypto_hourly_volatility  — avg |change_24h| per jam
-
-  [Enhanced — tidak bisa di ETS]
-  3. crypto_spike_alerts       — anomali harga (z-score > 2sigma)
-  4. crypto_news_price_join    — berita di jam yang sama dengan spike
-"""
+# 03_gold.py
+# Agregasi Silver → 4 tabel Gold untuk CryptoWatch (BTC/ETH/BNB)
+# 2 tabel reproduksi ETS + 2 tabel enhanced (butuh data bersih dari Silver)
 
 import os
 import platform
@@ -23,7 +13,6 @@ from pyspark.sql.functions import (
     when, lit
 )
 
-# ── Path ──────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).parent.resolve()
 
 def to_uri(p):
@@ -39,7 +28,6 @@ GOLD_VOLATILITY_PATH = _BASE / "gold" / "crypto_hourly_volatility"
 GOLD_SPIKE_PATH      = _BASE / "gold" / "crypto_spike_alerts"
 GOLD_JOIN_PATH       = _BASE / "gold" / "crypto_news_price_join"
 
-# ── SparkSession ──────────────────────────────────────────────────────
 builder = (
     SparkSession.builder
     .appName("Gold-CryptoWatch")
@@ -50,6 +38,8 @@ builder = (
             "org.apache.spark.sql.delta.catalog.DeltaCatalog")
     .config("spark.driver.memory", "2g")
     .config("spark.ui.enabled", "false")
+    .config("spark.driver.bindAddress", "127.0.0.1")
+    .config("spark.driver.host", "127.0.0.1")
 )
 
 spark = configure_spark_with_delta_pip(
@@ -68,9 +58,6 @@ print(f"  Silver RSS : {silver_rss.count()} records")
 print("=" * 65)
 
 
-# ════════════════════════════════════════════════════════════════════
-# GOLD 1 (Reproduksi ETS): Statistik Harga Per Simbol
-# ════════════════════════════════════════════════════════════════════
 print("\n  GOLD 1 - Statistik Harga Per Simbol (Reproduksi ETS Analisis 1)")
 print("  Perbedaan vs ETS: data sudah dedup -> stddev/avg lebih akurat")
 print("-" * 65)
@@ -94,9 +81,6 @@ gold_stats.write.format("delta").mode("overwrite").save(to_uri(GOLD_STATS_PATH))
 print(f"  Tersimpan: {to_uri(GOLD_STATS_PATH)}")
 
 
-# ════════════════════════════════════════════════════════════════════
-# GOLD 2 (Reproduksi ETS): Volatilitas Per Jam
-# ════════════════════════════════════════════════════════════════════
 print("\n  GOLD 2 - Volatilitas Per Jam (Reproduksi ETS Analisis 2)")
 print("  Perbedaan vs ETS: timestamp sudah TimestampType -> hour() presisi")
 print("-" * 65)
@@ -117,15 +101,12 @@ gold_volatility.write.format("delta").mode("overwrite").save(to_uri(GOLD_VOLATIL
 print(f"  Tersimpan: {to_uri(GOLD_VOLATILITY_PATH)}")
 
 
-# ════════════════════════════════════════════════════════════════════
-# GOLD 3 (Enhanced): Deteksi Spike Anomali Harga — Z-Score > 2σ
-# ════════════════════════════════════════════════════════════════════
 print("\n  GOLD 3 - Deteksi Spike Anomali Harga (Enhanced - BARU)")
 print("  Metode: Z-Score per simbol (|z| > 2 = anomali)")
 print("  Tidak bisa di ETS: duplikat dan price=0 merusak mean/stddev")
 print("-" * 65)
 
-# Hitung baseline per simbol
+# hitung mean dan stddev dulu per simbol, baru join untuk z-score
 baseline = (
     silver_api
     .groupBy("symbol")
@@ -165,16 +146,13 @@ spike_df.write.format("delta").mode("overwrite").save(to_uri(GOLD_SPIKE_PATH))
 print(f"  Tersimpan: {to_uri(GOLD_SPIKE_PATH)}")
 
 
-# ════════════════════════════════════════════════════════════════════
-# GOLD 4 (Enhanced): Berita vs Spike — Cross-source Join RSS + API
-# ════════════════════════════════════════════════════════════════════
 print("\n  GOLD 4 - Berita di Sekitar Lonjakan Harga (Enhanced - BARU)")
 print("  Join Silver RSS + Silver API berdasarkan jam")
 print("  Tidak bisa di ETS: API & RSS terpisah, timestamp string")
 print("-" * 65)
 
 try:
-    # Spike per jam per simbol
+    # ringkas spike ke level jam supaya bisa di-join sama data berita
     spike_by_hour = (
         spike_df
         .groupBy("symbol", "jam")
@@ -184,7 +162,7 @@ try:
         )
     )
 
-    # Berita per jam dari RSS
+    # hitung jumlah berita per jam dari RSS
     news_by_hour = (
         silver_rss
         .groupBy("jam")
@@ -234,9 +212,6 @@ except Exception as e:
     print(f"  Gold 4 error: {e}")
 
 
-# ════════════════════════════════════════════════════════════════════
-# RINGKASAN
-# ════════════════════════════════════════════════════════════════════
 print("\n" + "=" * 65)
 print("  GOLD LAYER SELESAI")
 print("=" * 65)

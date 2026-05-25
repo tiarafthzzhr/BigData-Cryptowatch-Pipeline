@@ -1,14 +1,6 @@
-"""
-01_bronze.py — HDFS JSON → Bronze Delta Lake
-Tema: CryptoWatch (BTC, ETH, BNB)
-
-Membaca file JSON mentah dari HDFS, menambahkan metadata kolom,
-dan menyimpan ke format Delta Lake sebagai Bronze layer.
-
-Skema data masuk:
-  API : symbol, coin_id, price_usd, price_idr, change_24h, last_updated, timestamp
-  RSS : title, link, summary, published, source, timestamp
-"""
+# 01_bronze.py
+# Baca data JSON dari HDFS (atau lokal kalau HDFS mati) dan simpan ke Delta Lake
+# Data: harga kripto BTC/ETH/BNB dari API + berita dari RSS feed
 
 import os
 import platform
@@ -17,29 +9,24 @@ from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 from pyspark.sql.functions import current_timestamp, lit
 
-# ── Konfigurasi path ──────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).parent.resolve()
 
 def to_uri(p):
-    """Konversi path ke string yang bisa dibaca Spark lokal (forward slash)."""
     return str(p).replace("\\", "/")
 
 HDFS_API_PATH = "hdfs://localhost:8020/data/crypto/api/"
 HDFS_RSS_PATH = "hdfs://localhost:8020/data/crypto/rss/"
 
-# Pada Windows dengan spasi di path (misal "TIARA F.A"), Hadoop tidak bisa
-# baca path dengan %20. Gunakan C:/sparkdata/ sebagai workaround.
-# Di Linux/Mac atau Windows tanpa spasi, pakai sample_data/ di dalam repo.
+# Windows dengan spasi di nama user tidak bisa baca path HDFS lokal,
+# jadi pakai C:/sparkdata/ sebagai workaround
 _WIN_SPACES = platform.system() == "Windows" and " " in str(SCRIPT_DIR)
 _BASE       = Path("C:/sparkdata") if _WIN_SPACES else SCRIPT_DIR / "lakehouse_data"
 
-LOCAL_API_DIR   = Path("C:/sparkdata/api")              if _WIN_SPACES else SCRIPT_DIR / "sample_data" / "api"
-LOCAL_RSS_DIR   = Path("C:/sparkdata/rss")              if _WIN_SPACES else SCRIPT_DIR / "sample_data" / "rss"
+LOCAL_API_DIR   = Path("C:/sparkdata/api")  if _WIN_SPACES else SCRIPT_DIR / "sample_data" / "api"
+LOCAL_RSS_DIR   = Path("C:/sparkdata/rss")  if _WIN_SPACES else SCRIPT_DIR / "sample_data" / "rss"
 BRONZE_API_PATH = _BASE / "bronze" / "crypto_api"
 BRONZE_RSS_PATH = _BASE / "bronze" / "crypto_rss"
 
-# ── Inisialisasi SparkSession + Delta Lake ────────────────────────────
-# Catatan: TIDAK set spark.hadoop.fs.defaultFS agar path lokal tetap lokal
 builder = (
     SparkSession.builder
     .appName("Bronze-CryptoWatch")
@@ -65,16 +52,12 @@ print("=" * 65)
 
 
 def ingest_to_bronze(hdfs_path, local_dir, bronze_path, source_name):
-    """
-    Baca JSON dari HDFS (atau fallback lokal), tambah metadata, simpan ke Delta.
-    Return jumlah records yang berhasil diingest.
-    """
     print(f"\n  Ingest '{source_name}' data...")
 
     df = None
     using_fallback = False
 
-    # Coba HDFS dulu
+    # coba HDFS dulu, kalau gagal fallback ke lokal
     try:
         df = spark.read.option("multiLine", True).json(hdfs_path)
         count = df.count()  # trigger action untuk cek koneksi
@@ -84,7 +67,6 @@ def ingest_to_bronze(hdfs_path, local_dir, bronze_path, source_name):
         print(f"  HDFS tidak aktif ({type(e).__name__})")
         df = None
 
-    # Fallback ke lokal jika HDFS gagal
     if df is None:
         if local_dir.exists():
             local_uri = to_uri(local_dir)
@@ -105,27 +87,22 @@ def ingest_to_bronze(hdfs_path, local_dir, bronze_path, source_name):
 
     df.printSchema()
 
-    # Tambah metadata wajib
+    # tambah kolom metadata sebelum disimpan
     bronze_df = (
         df
         .withColumn("_ingested_at", current_timestamp())
         .withColumn("_source", lit(source_name))
     )
 
-    # Simpan ke Delta Lake (pakai file:// URI)
     bronze_uri = to_uri(bronze_path)
     bronze_df.write.format("delta").mode("append").save(bronze_uri)
     print(f"  Tersimpan ke Delta: {bronze_uri}")
     return total
 
 
-# ── Ingest API (harga koin real-time) ────────────────────────────────
 total_api = ingest_to_bronze(HDFS_API_PATH, LOCAL_API_DIR, BRONZE_API_PATH, "api")
-
-# ── Ingest RSS (berita kripto) ────────────────────────────────────────
 total_rss = ingest_to_bronze(HDFS_RSS_PATH, LOCAL_RSS_DIR, BRONZE_RSS_PATH, "rss")
 
-# ── Verifikasi hasil ──────────────────────────────────────────────────
 print("\n" + "=" * 65)
 print("  RINGKASAN BRONZE LAYER")
 print("=" * 65)
