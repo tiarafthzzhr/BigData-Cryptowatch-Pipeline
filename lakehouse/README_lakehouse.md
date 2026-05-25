@@ -541,7 +541,19 @@ python dashboard/app.py              # jalankan Flask
 
 ---
 
-*Kelompok 7 — Tiara Fatimah A., Zahra Hafidzah, Nafis Faqih Allmuzaky Maolidi, Mohamad Arkan Zahir A.*
+## Pembagian Tugas — Lakehouse
+
+| Anggota | ETS (sebelumnya) | Lakehouse (tugas ini) |
+|---------|-----------------|----------------------|
+| **Mohamad Arkan Zahir A.** | Setup Docker (Hadoop & Kafka), infrastruktur | `00_setup.md` — dokumentasi setup Spark + Delta Lake, troubleshooting environment |
+| **Zahra Hafizhah** | `producer_api.py` — integrasi API eksternal | `01_bronze.py` — ingest data API & RSS dari HDFS ke Bronze Delta Lake |
+| **Nafis Faqih A.M.** | `producer_rss.py` + `consumer_to_hdfs.py` | `02_silver.py` — 5 transformasi cleaning, Time Travel, Schema Evolution |
+| **Tiara Fatimah Azzahra** | `spark/analysis.ipynb` — 3 analisis + bonus MLlib | `03_gold.py` — 4 tabel Gold (2 reproduksi ETS + 2 enhanced: z-score & cross-source join) |
+| **Ananda Widi Alrafi** | `dashboard/app.py` + `index.html` | `04_export_gold.py` + update `dashboard/app.py` — endpoint `/api/gold` dari Gold Delta |
+
+---
+
+*Kelompok 7 — Mohamad Arkan Zahir A., Zahra Hafizhah, Nafis Faqih Allmuzaky Maolidi, Tiara Fatimah Azzahra, Ananda Widi Alrafi*
 
 ---
 
